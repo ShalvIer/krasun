@@ -1,0 +1,2 @@
+export function activeStatus<T extends { expiresAt: string }>(status: T | null | undefined, now = Date.now()) { return status && new Date(status.expiresAt).getTime() > now ? status : null; }
+export function locationLabel(state: string | null | undefined) { return state === "FROZEN" ? "Frozen at last coordinate" : state === "HIDDEN" ? "Location hidden" : state === "LIVE" ? "Sharing live" : "Offline · last known location retained"; }

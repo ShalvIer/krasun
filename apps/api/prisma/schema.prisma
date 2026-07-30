@@ -1,0 +1,318 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AuthProvider {
+  GOOGLE
+}
+
+enum GroupJoinMode {
+  OPEN
+  APPROVAL_REQUIRED
+  INVITE_ONLY
+}
+
+enum GroupRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum JoinRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ConversationType {
+  DIRECT
+  GROUP
+}
+
+enum MessageType {
+  TEXT
+  AUDIO
+  PHOTO
+  SPOT
+  LOCATION
+  MEETING
+  VIDEO
+  FILE
+  SYSTEM
+}
+
+enum LocationState {
+  LIVE
+  FROZEN
+  HIDDEN
+  OFFLINE
+}
+
+enum MapAvatarType {
+  DEFAULT
+  EMOJI
+  PHOTO
+  GIF
+  VIDEO
+}
+
+enum SpotVisibility {
+  PUBLIC
+  PRIVATE
+}
+
+model User {
+  id                       String   @id @default(uuid()) @db.Uuid
+  username                 String?  @unique
+  displayName              String?
+  primaryEmail             String   @unique
+  alternateEmail           String?
+  alternateEmailVerifiedAt DateTime?
+  profileAvatarPath        String?
+  onboardingCompleted      Boolean  @default(false)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+  lastSeenAt               DateTime @default(now())
+
+  identities         AuthIdentity[]
+  refreshSessions    RefreshSession[]
+  emailTokens        EmailVerificationToken[]
+  ownedGroups        Group[] @relation("GroupOwner")
+  memberships        GroupMember[]
+  groupInvites       GroupInvite[] @relation("InviteCreator")
+  joinRequests       GroupJoinRequest[] @relation("JoinRequester")
+  reviewedRequests   GroupJoinRequest[] @relation("JoinReviewer")
+  conversationLinks  ConversationParticipant[]
+  sentMessages       Message[]
+  location           UserLocation?
+  mapAvatar          MapAvatar?
+  status             UserStatus?
+  spots              Spot[]
+  spotVisibility     SpotGroupVisibility[]
+  preferences        UserPreference[]
+}
+
+model AuthIdentity {
+  id        String       @id @default(uuid()) @db.Uuid
+  userId    String       @db.Uuid
+  provider  AuthProvider
+  subject   String
+  createdAt DateTime     @default(now())
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([provider, subject])
+  @@index([userId])
+}
+
+model RefreshSession {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  tokenHash String   @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+  lastUsedAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, expiresAt])
+}
+
+model EmailVerificationToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  email     String
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, expiresAt])
+}
+
+model Group {
+  id              String        @id @default(uuid()) @db.Uuid
+  name            String
+  description     String?
+  avatarPath      String?
+  ownerId         String        @db.Uuid
+  inviteCode      String        @unique
+  joinMode        GroupJoinMode @default(OPEN)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  owner           User          @relation("GroupOwner", fields: [ownerId], references: [id])
+  members         GroupMember[]
+  invites         GroupInvite[]
+  joinRequests    GroupJoinRequest[]
+  conversation    Conversation?
+  spotVisibility  SpotGroupVisibility[]
+  @@index([ownerId])
+}
+
+model GroupMember {
+  id        String    @id @default(uuid()) @db.Uuid
+  groupId   String    @db.Uuid
+  userId    String    @db.Uuid
+  role      GroupRole @default(MEMBER)
+  active    Boolean   @default(true)
+  joinedAt  DateTime  @default(now())
+  group     Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([groupId, userId])
+  @@index([userId, active])
+}
+
+model GroupInvite {
+  id          String   @id @default(uuid()) @db.Uuid
+  groupId     String   @db.Uuid
+  code        String   @unique
+  createdById String   @db.Uuid
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime @default(now())
+  group       Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  createdBy   User     @relation("InviteCreator", fields: [createdById], references: [id])
+  @@index([groupId])
+}
+
+model GroupJoinRequest {
+  id           String            @id @default(uuid()) @db.Uuid
+  groupId      String            @db.Uuid
+  userId       String            @db.Uuid
+  status       JoinRequestStatus @default(PENDING)
+  reviewedById String?           @db.Uuid
+  reviewedAt   DateTime?
+  createdAt    DateTime          @default(now())
+  group        Group             @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user         User              @relation("JoinRequester", fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy   User?             @relation("JoinReviewer", fields: [reviewedById], references: [id])
+  @@unique([groupId, userId])
+  @@index([groupId, status])
+}
+
+model Conversation {
+  id           String           @id @default(uuid()) @db.Uuid
+  type         ConversationType
+  groupId      String?          @unique @db.Uuid
+  directKey    String?          @unique
+  title        String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  group        Group?           @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  participants ConversationParticipant[]
+  messages     Message[]
+}
+
+model ConversationParticipant {
+  id             String       @id @default(uuid()) @db.Uuid
+  conversationId String       @db.Uuid
+  userId         String       @db.Uuid
+  joinedAt       DateTime     @default(now())
+  lastReadAt     DateTime?
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([conversationId, userId])
+  @@index([userId])
+}
+
+model Message {
+  id             String       @id @default(uuid()) @db.Uuid
+  conversationId String       @db.Uuid
+  senderId       String?      @db.Uuid
+  type           MessageType
+  text           String?
+  payload        Json?
+  createdAt      DateTime     @default(now())
+  editedAt       DateTime?
+  deletedAt      DateTime?
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User?        @relation(fields: [senderId], references: [id], onDelete: SetNull)
+  attachments    MessageAttachment[]
+  @@index([conversationId, createdAt])
+}
+
+model MessageAttachment {
+  id           String   @id @default(uuid()) @db.Uuid
+  messageId    String   @db.Uuid
+  mediaType    String
+  originalName String
+  storagePath  String
+  mimeType     String
+  sizeBytes    Int
+  width        Int?
+  height       Int?
+  duration     Float?
+  createdAt    DateTime @default(now())
+  message      Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  @@index([messageId])
+}
+
+model UserLocation {
+  userId      String        @id @db.Uuid
+  state       LocationState @default(OFFLINE)
+  latitude    Float?
+  longitude   Float?
+  accuracy    Float?
+  frozenAt    DateTime?
+  updatedAt   DateTime      @updatedAt
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model MapAvatar {
+  userId      String        @id @db.Uuid
+  type        MapAvatarType @default(DEFAULT)
+  value       String?
+  storagePath String?
+  updatedAt   DateTime      @updatedAt
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model UserStatus {
+  userId    String   @id @db.Uuid
+  text      String
+  emoji     String?
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([expiresAt])
+}
+
+model Spot {
+  id          String         @id @default(uuid()) @db.Uuid
+  ownerId     String         @db.Uuid
+  title       String
+  description String         @default("")
+  visibility  SpotVisibility
+  latitude    Float
+  longitude   Float
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  deletedAt   DateTime?
+  owner       User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  groups      SpotGroupVisibility[]
+  @@index([ownerId, visibility, deletedAt])
+}
+
+model SpotGroupVisibility {
+  id        String   @id @default(uuid()) @db.Uuid
+  spotId    String   @db.Uuid
+  groupId   String   @db.Uuid
+  addedById String   @db.Uuid
+  createdAt DateTime @default(now())
+  spot      Spot     @relation(fields: [spotId], references: [id], onDelete: Cascade)
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  addedBy   User     @relation(fields: [addedById], references: [id])
+  @@unique([spotId, groupId])
+}
+
+model UserPreference {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  key       String
+  value     Json
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([userId, key])
+}

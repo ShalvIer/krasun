@@ -1,0 +1,10 @@
+{
+  "name": "@krasun/shared-socket-events",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": { "@krasun/shared-types": "1.0.0" },
+  "scripts": { "typecheck": "tsc --noEmit", "lint": "eslint src --max-warnings=0" },
+  "devDependencies": { "typescript": "^5.9.3" }
+}
