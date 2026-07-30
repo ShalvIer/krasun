@@ -7,7 +7,10 @@ import { prisma } from "./lib/prisma.js";
 const app = createApp();
 const server = createServer(app);
 app.locals.io = createSocketServer(server);
-server.listen(env.API_PORT, () => console.info(`Krasun API listening on http://localhost:${env.API_PORT}`));
+const port = env.PORT ?? env.API_PORT;
+server.listen(port, "0.0.0.0", () =>
+  console.info(`Krasun API listening on http://0.0.0.0:${port}`)
+);
 
 async function shutdown() {
   server.close();

@@ -4,6 +4,7 @@ import { z } from "zod";
 const schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   API_PORT: z.coerce.number().int().positive().default(3001),
+  PORT: z.coerce.number().int().positive().optional(),
   WEB_URL: z.string().url().default("http://localhost:5173"),
   DATABASE_URL: z.string().min(1),
   GOOGLE_CLIENT_ID: z.string().default(""),
