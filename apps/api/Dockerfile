@@ -1,4 +1,4 @@
-FROM node:20-alpine AS build
+FROM node:22-alpine AS build
 WORKDIR /app
 COPY package*.json ./
 COPY apps/api/package.json apps/api/package.json
@@ -11,7 +11,7 @@ COPY apps/api apps/api
 COPY packages packages
 RUN npm run build -w @krasun/api
 
-FROM node:20-alpine AS runtime
+FROM node:22-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build /app/node_modules ./node_modules
