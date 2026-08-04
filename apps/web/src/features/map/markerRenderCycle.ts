@@ -2,42 +2,77 @@ export interface RemovableMarker {
   remove(): void;
 }
 
-export class MarkerRenderCycle<TMarker extends RemovableMarker = RemovableMarker> {
-  private active = true;
-  private readonly markers = new Set<TMarker>();
-  private readonly blobUrls = new Set<string>();
+export class MarkerRegistry<TMarker extends RemovableMarker = RemovableMarker> {
+  private readonly markers = new Map<string, TMarker>();
+  private readonly blobUrls = new Map<string, string>();
+  private readonly revisions = new Map<string, number>();
 
-  constructor(private readonly revokeBlobUrl = (url: string) => URL.revokeObjectURL(url)) {}
+  constructor(
+    private readonly revokeBlobUrl = (url: string) => URL.revokeObjectURL(url),
+  ) {}
 
-  isActive() {
-    return this.active;
+  getMarker(key: string) {
+    return this.markers.get(key);
   }
 
-  retainMarker(marker: TMarker) {
-    if (!this.active) {
+  retainMarker(key: string, marker: TMarker) {
+    const existing = this.markers.get(key);
+
+    if (existing && existing !== marker) {
       marker.remove();
       return false;
     }
-    this.markers.add(marker);
+
+    if (!existing) this.markers.set(key, marker);
     return true;
   }
 
-  retainBlobUrl(url: string) {
-    if (!this.active) {
-      this.revokeBlobUrl(url);
-      return false;
-    }
-    this.blobUrls.add(url);
-    return true;
+  beginUpdate(key: string) {
+    const revision = (this.revisions.get(key) ?? 0) + 1;
+    this.revisions.set(key, revision);
+    return revision;
   }
 
-  cancel() {
-    if (!this.active) return;
-    this.active = false;
+  isCurrent(key: string, marker: TMarker, revision: number) {
+    return (
+      this.markers.get(key) === marker &&
+      this.revisions.get(key) === revision
+    );
+  }
+
+  retainBlobUrl(key: string, url: string) {
+    const previous = this.blobUrls.get(key);
+    if (previous && previous !== url) this.revokeBlobUrl(previous);
+    this.blobUrls.set(key, url);
+  }
+
+  clearBlobUrl(key: string) {
+    const current = this.blobUrls.get(key);
+    if (!current) return;
+    this.revokeBlobUrl(current);
+    this.blobUrls.delete(key);
+  }
+
+  discardBlobUrl(url: string) {
+    this.revokeBlobUrl(url);
+  }
+
+  removeMissing(activeKeys: ReadonlySet<string>) {
+    this.markers.forEach((marker, key) => {
+      if (activeKeys.has(key)) return;
+      marker.remove();
+      this.markers.delete(key);
+      this.clearBlobUrl(key);
+      this.revisions.delete(key);
+    });
+  }
+
+  clear() {
     this.markers.forEach((marker) => marker.remove());
     this.markers.clear();
     this.blobUrls.forEach((url) => this.revokeBlobUrl(url));
     this.blobUrls.clear();
+    this.revisions.clear();
   }
 }
 

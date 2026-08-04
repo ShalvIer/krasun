@@ -9,7 +9,7 @@ import { useLocationSharing } from "../location/LocationProvider";
 import { useGroups } from "../groups/useGroups";
 import { publicSpotsForUser, spotsBounds } from "./mapActions";
 import { coordinatesFromSearch, DEFAULT_MAP_CENTER, ownMapLocation } from "./mapInitialView";
-import { MarkerRenderCycle, uniqueById } from "./markerRenderCycle";
+import { MarkerRegistry, uniqueById } from "./markerRenderCycle";
 import { useAuth } from "../auth/AuthContext";
 import { MapAvatarView } from "../profile/MapAvatar";
 
@@ -18,7 +18,7 @@ type MapUser = UserSummary & { role?: string };
 export function MapPage() {
   const { groupId: routeGroupId } = useParams(); const [search] = useSearchParams(); const navigate = useNavigate(); const socket = useSocket(); const location = useLocationSharing(); const { groups } = useGroups(); const { user: sessionUser } = useAuth();
   const group = groups.find((item) => item.id === routeGroupId) ?? groups[0]; const groupId = group?.id;
-  const mapNode = useRef<HTMLDivElement>(null); const mapRef = useRef<MapboxMap | null>(null); const markers = useRef<Map<string, Marker>>(new Map());
+  const mapNode = useRef<HTMLDivElement>(null); const mapRef = useRef<MapboxMap | null>(null); const markerRegistry = useRef(new MarkerRegistry<Marker>());
   const initialCenterApplied = useRef(false);
   const [mapReady, setMapReady] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -60,7 +60,7 @@ export function MapPage() {
     map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), "bottom-right");
     map.on("click", (event) => { if (map.getCanvas().dataset.placing === "true") { setPlacing({ latitude: event.lngLat.lat, longitude: event.lngLat.lng }); map.getCanvas().dataset.placing = "false"; } });
     mapRef.current = map;
-    return () => { map.off("load", onMapLoad); markers.current.forEach((marker) => marker.remove()); markers.current.clear(); map.remove(); mapRef.current = null; };
+    return () => { map.off("load", onMapLoad); markerRegistry.current.clear(); map.remove(); mapRef.current = null; };
   }, [mapToken, groupId]);
 
   useEffect(() => {
@@ -73,44 +73,137 @@ export function MapPage() {
   }, [users, sessionUser, search, mapReady, location.coordinates]);
 
   useEffect(() => {
-    const map = mapRef.current; if (!map) return;
-    const renderCycle = new MarkerRenderCycle<Marker>();
-    markers.current.forEach((marker) => marker.remove()); markers.current.clear();
-    void Promise.all(uniqueById(users).filter((user) => user.location && user.locationState !== "HIDDEN").map(async (user) => {
-      const element = document.createElement("button"); element.className = `map-user-marker state-${user.locationState?.toLowerCase()}`; element.title = `${user.displayName} · ${user.locationState}`;
-      const avatar = user.mapAvatar; const value = avatar?.value || "";
-      if (avatar?.type === "EMOJI") element.textContent = value;
-      else if (["PHOTO", "GIF", "VIDEO"].includes(avatar?.type || "") && value) {
-        let source = value;
-        if (value.startsWith("/api/")) {
-          try {
-            source = await authenticatedMediaUrl(value);
-            if (!renderCycle.retainBlobUrl(source)) return;
-          } catch {
-            source = "";
-          }
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+
+    const registry = markerRegistry.current;
+    const activeKeys = new Set<string>();
+
+    uniqueById(users)
+      .filter((user) => user.location && user.locationState !== "HIDDEN")
+      .forEach((user) => {
+        const key = `user:${user.id}`;
+        activeKeys.add(key);
+
+        let marker = registry.getMarker(key);
+        if (!marker) {
+          const element = document.createElement("button");
+          element.type = "button";
+          element.textContent = user.displayName[0]?.toUpperCase() || "K";
+          marker = new mapboxgl.Marker({ element })
+            .setLngLat([user.location!.longitude, user.location!.latitude])
+            .addTo(map);
+          registry.retainMarker(key, marker);
         }
-        if (!renderCycle.isActive()) return;
-        if (source && avatar?.type === "VIDEO") { const video = document.createElement("video"); video.src = source; video.autoplay = true; video.muted = true; video.loop = true; video.playsInline = true; element.append(video); }
-        else if (source) { const image = document.createElement("img"); image.src = source; image.alt = ""; element.append(image); }
-        else element.textContent = user.displayName[0]?.toUpperCase() || "K";
-      } else element.textContent = user.displayName[0]?.toUpperCase() || "K";
+
+        const currentMarker = marker;
+        const element = currentMarker.getElement() as HTMLButtonElement;
+        currentMarker.setLngLat([
+          user.location!.longitude,
+          user.location!.latitude,
+        ]);
+
+        element.className = `map-user-marker state-${user.locationState?.toLowerCase()}`;
+        element.title = `${user.displayName} · ${user.locationState}`;
+        element.onclick = (event) => {
+          event.stopPropagation();
+          centerMap(user.location!, 15);
+          setSelectedUser(user);
+          setSelectedSpot(null);
+        };
+
+        const avatarType = user.mapAvatar?.type;
+        const avatarValue = user.mapAvatar?.value || "";
+        const avatarKey = `${avatarType || "NONE"}:${avatarValue}`;
+
+        if (element.dataset.avatarKey === avatarKey) return;
+        element.dataset.avatarKey = avatarKey;
+
+        const revision = registry.beginUpdate(key);
+        registry.clearBlobUrl(key);
+
+        element.replaceChildren();
+        element.textContent =
+          avatarType === "EMOJI" && avatarValue
+            ? avatarValue
+            : user.displayName[0]?.toUpperCase() || "K";
+
+        const isMediaAvatar =
+          avatarType === "PHOTO" ||
+          avatarType === "GIF" ||
+          avatarType === "VIDEO";
+
+        if (!isMediaAvatar || !avatarValue) return;
+
+        void (async () => {
+          let source = avatarValue;
+          const authenticated = avatarValue.startsWith("/api/");
+
+          try {
+            if (authenticated) {
+              source = await authenticatedMediaUrl(avatarValue);
+            }
+          } catch {
+            return;
+          }
+
+          if (!registry.isCurrent(key, currentMarker, revision)) {
+            if (authenticated) registry.discardBlobUrl(source);
+            return;
+          }
+
+          const media =
+            avatarType === "VIDEO"
+              ? document.createElement("video")
+              : document.createElement("img");
+
+          media.src = source;
+
+          if (media instanceof HTMLVideoElement) {
+            media.autoplay = true;
+            media.muted = true;
+            media.loop = true;
+            media.playsInline = true;
+          } else {
+            media.alt = "";
+          }
+
+          if (authenticated) registry.retainBlobUrl(key, source);
+          element.replaceChildren(media);
+        })();
+      });
+
+    uniqueById(spots).forEach((spot) => {
+      const key = `spot:${spot.id}`;
+      activeKeys.add(key);
+
+      let marker = registry.getMarker(key);
+      if (!marker) {
+        const element = document.createElement("button");
+        element.type = "button";
+        marker = new mapboxgl.Marker({ element })
+          .setLngLat([spot.longitude, spot.latitude])
+          .addTo(map);
+        registry.retainMarker(key, marker);
+      }
+
+      const currentMarker = marker;
+      const element = currentMarker.getElement() as HTMLButtonElement;
+
+      currentMarker.setLngLat([spot.longitude, spot.latitude]);
+      element.className = `spot-marker ${spot.visibility.toLowerCase()}`;
+      element.innerHTML =
+        spot.visibility === "PRIVATE" ? "<span>◆</span>" : "<span>●</span>";
+      element.title = spot.title;
       element.onclick = (event) => {
         event.stopPropagation();
-        centerMap(user.location!, 15);
-        setSelectedUser(user);
-        setSelectedSpot(null);
+        setSelectedSpot(spot);
+        setSelectedUser(null);
       };
-      if (!renderCycle.isActive()) return;
-      const marker = new mapboxgl.Marker({ element }).setLngLat([user.location!.longitude, user.location!.latitude]).addTo(map);
-      if (renderCycle.retainMarker(marker)) markers.current.set(`user:${user.id}`, marker);
-    }));
-    uniqueById(spots).forEach((spot) => { const element = document.createElement("button"); element.className = `spot-marker ${spot.visibility.toLowerCase()}`; element.innerHTML = spot.visibility === "PRIVATE" ? "<span>◆</span>" : "<span>●</span>"; element.title = spot.title; element.onclick = (event) => { event.stopPropagation(); setSelectedSpot(spot); setSelectedUser(null); }; const marker = new mapboxgl.Marker({ element }).setLngLat([spot.longitude, spot.latitude]).addTo(map); if (renderCycle.retainMarker(marker)) markers.current.set(`spot:${spot.id}`, marker); });
-    return () => {
-      renderCycle.cancel();
-      markers.current.clear();
-    };
-  }, [users, spots]);
+    });
+
+    registry.removeMissing(activeKeys);
+  }, [users, spots, mapReady]);
 
   useEffect(() => { if (!search.get("spotId")) return; const spot = spots.find((item) => item.id === search.get("spotId")); if (spot) { setSelectedSpot(spot); mapRef.current?.flyTo({ center: [spot.longitude, spot.latitude], zoom: 15 }); } }, [spots, search]);
 
