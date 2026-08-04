@@ -50,6 +50,7 @@ export interface ConversationSummary {
   groupId: string | null;
   participants: UserSummary[];
   lastMessage: MessageView | null;
+  unreadCount: number;
 }
 
 export interface AttachmentView {

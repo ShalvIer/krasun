@@ -4,12 +4,12 @@ import { z } from "zod";
 const schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   API_PORT: z.coerce.number().int().positive().default(3001),
-  PORT: z.coerce.number().int().positive().optional(),
   WEB_URL: z.string().url().default("http://localhost:5173"),
+  WEB_DIST_DIR: z.string().optional(),
   DATABASE_URL: z.string().min(1),
   DIRECT_URL: z.string().min(1).optional(),
-  SUPABASE_URL: z.string().url(),
-  SUPABASE_SECRET_KEY: z.string().min(1),
+  SUPABASE_URL: z.string().url().default("http://127.0.0.1:54321"),
+  SUPABASE_SECRET_KEY: z.string().default("development-supabase-secret"),
   SUPABASE_STORAGE_BUCKET: z.string().default("krasun-media"),
   GOOGLE_CLIENT_ID: z.string().default(""),
   ACCESS_TOKEN_SECRET: z.string().min(32).default("development-access-secret-change-me-now"),
@@ -19,7 +19,9 @@ const schema = z.object({
   SESSION_IDLE_HOURS: z.coerce.number().int().min(1).max(168).default(24),
   SESSION_ABSOLUTE_DAYS: z.coerce.number().int().min(1).max(30).default(7),
   MAPBOX_SERVER_TOKEN: z.string().default(""),
-  UPLOAD_DIR: z.string().default("./uploads"),
+  VAPID_PUBLIC_KEY: z.string().default(""),
+  VAPID_PRIVATE_KEY: z.string().default(""),
+  VAPID_SUBJECT: z.string().default("mailto:notifications@krasun.app"),
   MAX_PHOTO_UPLOAD_BYTES: z.coerce.number().positive().default(10 * 1024 * 1024),
   MAX_AUDIO_UPLOAD_BYTES: z.coerce.number().positive().default(10 * 1024 * 1024),
   MAX_GIF_UPLOAD_BYTES: z.coerce.number().positive().default(5 * 1024 * 1024),
@@ -27,4 +29,12 @@ const schema = z.object({
   ENABLE_DEV_AUTH: z.string().default("false").transform((value) => value === "true")
 });
 
-export const env = schema.parse(process.env);
+const renderWebUrl = process.env.RENDER_EXTERNAL_HOSTNAME
+  ? `https://${process.env.RENDER_EXTERNAL_HOSTNAME}`
+  : undefined;
+
+export const env = schema.parse({
+  ...process.env,
+  API_PORT: process.env.PORT ?? process.env.API_PORT,
+  WEB_URL: process.env.WEB_URL ?? renderWebUrl
+});

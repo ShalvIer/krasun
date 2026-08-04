@@ -4,60 +4,28 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=20.19.0"
+    "node": ">=22.0.0"
   },
   "workspaces": [
     "apps/*",
     "packages/*"
   ],
   "scripts": {
-    "install:ci": "bash scripts/install-ci.sh",
-    "dev": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vite",
-    "dev:app": "concurrently -n api,web -c cyan,blue \"npm run dev -w @krasun/api\" \"npm run dev -w @krasun/web\"",
+    "dev": "concurrently -n api,web -c cyan,blue \"npm run dev -w @krasun/api\" \"npm run dev -w @krasun/web\"",
     "dev:api": "npm run dev -w @krasun/api",
     "dev:web": "npm run dev -w @krasun/web",
-    "dev:site": "npm run dev",
-    "start": "npm run dev",
-    "build": "npm run build:workspaces",
-    "build:site": "bash scripts/build-verified.sh",
-    "build:workspaces": "npm run build -w @krasun/api && npm run build -w @krasun/web",
+    "build": "npm run build -w @krasun/api && npm run build -w @krasun/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "lint": "npm run lint:workspaces && bash scripts/sites-env.sh -- eslint app --ignore-pattern dist",
-    "lint:workspaces": "npm run lint --workspaces --if-present",
-    "test": "npm run test:workspaces",
-    "test:workspaces": "npm run test --workspaces --if-present",
-    "validate:artifact": "bash scripts/validate-artifact.sh",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
     "db:generate": "npm run db:generate -w @krasun/api",
     "db:migrate": "npm run db:migrate -w @krasun/api",
     "db:deploy": "npm run db:deploy -w @krasun/api",
     "db:seed": "npm run db:seed -w @krasun/api",
     "db:studio": "npm run db:studio -w @krasun/api"
   },
-  "dependencies": {
-    "drizzle-orm": "0.45.2",
-    "next": "16.2.6",
-    "react": "19.2.6",
-    "react-dom": "19.2.6"
-  },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "1.37.1",
-    "@tailwindcss/postcss": "4.2.1",
-    "@types/node": "22.19.19",
-    "@types/react": "19.2.14",
-    "@types/react-dom": "19.2.3",
-    "@vitejs/plugin-react": "6.0.2",
-    "@vitejs/plugin-rsc": "0.5.26",
-    "concurrently": "9.2.1",
-    "drizzle-kit": "0.31.10",
-    "eslint": "9.39.4",
-    "eslint-config-next": "16.2.6",
-    "react-server-dom-webpack": "19.2.6",
-    "tailwindcss": "4.2.1",
-    "typescript": "5.9.3",
-    "typescript-eslint": "8.46.1",
-    "vinext": "0.0.50",
-    "vite": "8.0.13",
-    "wrangler": "4.92.0"
-  },
-  "displayName": "Krasun"
+    "@tailwindcss/postcss": "^4.3.3",
+    "concurrently": "^9.2.1"
+  }
 }
