@@ -1,23 +1,44 @@
 import { describe, expect, it, vi } from "vitest";
-import { MarkerRenderCycle, uniqueById } from "./markerRenderCycle";
+import { MarkerRegistry, uniqueById } from "./markerRenderCycle";
 
-describe("MarkerRenderCycle", () => {
-  it("removes current markers and rejects stale async results after cancellation", () => {
-    const revokeBlobUrl = vi.fn();
+describe("MarkerRegistry", () => {
+  it("preserves the same marker between coordinate updates", () => {
+    const registry = new MarkerRegistry();
     const currentMarker = { remove: vi.fn() };
-    const staleMarker = { remove: vi.fn() };
-    const cycle = new MarkerRenderCycle(revokeBlobUrl);
+    const duplicateMarker = { remove: vi.fn() };
 
-    expect(cycle.retainMarker(currentMarker)).toBe(true);
-    expect(cycle.retainBlobUrl("blob:current-avatar")).toBe(true);
-    cycle.cancel();
+    expect(registry.retainMarker("user:one", currentMarker)).toBe(true);
+    expect(registry.getMarker("user:one")).toBe(currentMarker);
 
+    expect(registry.retainMarker("user:one", duplicateMarker)).toBe(false);
+    expect(registry.getMarker("user:one")).toBe(currentMarker);
+    expect(currentMarker.remove).not.toHaveBeenCalled();
+    expect(duplicateMarker.remove).toHaveBeenCalledOnce();
+
+    registry.removeMissing(new Set(["user:one"]));
+    expect(currentMarker.remove).not.toHaveBeenCalled();
+
+    registry.removeMissing(new Set());
     expect(currentMarker.remove).toHaveBeenCalledOnce();
-    expect(revokeBlobUrl).toHaveBeenCalledWith("blob:current-avatar");
-    expect(cycle.retainMarker(staleMarker)).toBe(false);
-    expect(staleMarker.remove).toHaveBeenCalledOnce();
-    expect(cycle.retainBlobUrl("blob:late-avatar")).toBe(false);
-    expect(revokeBlobUrl).toHaveBeenCalledWith("blob:late-avatar");
+  });
+
+  it("rejects stale avatar results and revokes blob URLs", () => {
+    const revokeBlobUrl = vi.fn();
+    const registry = new MarkerRegistry(revokeBlobUrl);
+    const marker = { remove: vi.fn() };
+
+    registry.retainMarker("user:one", marker);
+    const staleRevision = registry.beginUpdate("user:one");
+    const currentRevision = registry.beginUpdate("user:one");
+
+    expect(registry.isCurrent("user:one", marker, staleRevision)).toBe(false);
+    expect(registry.isCurrent("user:one", marker, currentRevision)).toBe(true);
+
+    registry.retainBlobUrl("user:one", "blob:avatar");
+    registry.clear();
+
+    expect(revokeBlobUrl).toHaveBeenCalledWith("blob:avatar");
+    expect(marker.remove).toHaveBeenCalledOnce();
   });
 });
 
