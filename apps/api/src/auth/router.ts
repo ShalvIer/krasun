@@ -54,7 +54,7 @@ authRouter.post("/alternate-email", requireAuth, asyncRoute(async (req, res) => 
     prisma.user.update({ where: { id: userId }, data: { alternateEmail: email.toLowerCase(), alternateEmailVerifiedAt: null } }),
     prisma.emailVerificationToken.create({ data: { id: crypto.randomUUID(), userId, email: email.toLowerCase(), tokenHash: hashToken(token), expiresAt: new Date(Date.now() + 30 * 60_000) } })
   ]);
-  const verificationUrl = `${env.API_PORT ? `http://localhost:${env.API_PORT}` : ""}/api/auth/verify-email?token=${token}`;
+  const verificationUrl = `${env.WEB_URL}/api/auth/verify-email?token=${token}`;
   if (env.NODE_ENV !== "production") console.info(`[Krasun dev mail] Verify alternate email: ${verificationUrl}`);
   res.status(202).json({ message: "Verification email prepared", ...(env.NODE_ENV !== "production" ? { verificationUrl } : {}) });
 }));

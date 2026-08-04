@@ -6,14 +6,11 @@ services:
     plan: free
     dockerfilePath: ./apps/api/Dockerfile
     dockerContext: .
+    healthCheckPath: /health
     autoDeployTrigger: commit
     envVars:
       - key: NODE_ENV
         value: production
-      - key: PORT
-        value: "10000"
-      - key: API_PORT
-        value: "10000"
       - key: WEB_URL
         value: https://krasun-web-shalvier.onrender.com
       - key: DATABASE_URL
@@ -36,12 +33,20 @@ services:
         sync: false
       - key: MAPBOX_SERVER_TOKEN
         sync: false
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_SUBJECT
+        sync: false
       - key: ENABLE_DEV_AUTH
         value: "false"
 
   - type: web
     name: krasun-web-shalvier
     runtime: static
+    plan: free
+    region: frankfurt
     buildCommand: npm ci && npm run build -w @krasun/web
     staticPublishPath: ./apps/web/dist
     autoDeployTrigger: commit

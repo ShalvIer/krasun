@@ -7,6 +7,7 @@ import { prisma } from "../lib/prisma.js";
 import { getOrCreateDirectConversation, messageInclude, requireConversationAccess, serializeMessage } from "./service.js";
 import { getIo } from "../sockets/helpers.js";
 import type { Prisma } from "@prisma/client";
+import { sendMessagePush } from "../push/service.js";
 
 export const conversationsRouter = Router();
 
@@ -17,14 +18,25 @@ conversationsRouter.get("/", asyncRoute(async (req, res) => {
     include: { conversation: { include: { group: true, participants: { include: { user: true } }, messages: { where: { deletedAt: null }, orderBy: { createdAt: "desc" }, take: 1, include: messageInclude } } } },
     orderBy: { conversation: { updatedAt: "desc" } }
   });
-  const conversations = await Promise.all(links.map(async ({ conversation }) => ({
-    id: conversation.id,
-    type: conversation.type,
-    title: conversation.type === "GROUP" ? conversation.group?.name ?? conversation.title ?? "Group" : conversation.participants.find((item) => item.userId !== userId)?.user.displayName ?? "Direct message",
-    groupId: conversation.groupId,
-    participants: conversation.participants.map(({ user }) => ({ id: user.id, username: user.username ?? "user", displayName: user.displayName ?? user.username ?? "Krasun user", profileAvatarPath: user.profileAvatarPath, lastSeenAt: user.lastSeenAt.toISOString() })),
-    lastMessage: conversation.messages[0] ? await serializeMessage(conversation.messages[0]) : null
-  })));
+  const conversations = await Promise.all(links.map(async ({ conversation, lastReadAt, joinedAt }) => {
+    const unreadCount = await prisma.message.count({
+      where: {
+        conversationId: conversation.id,
+        senderId: { not: userId },
+        deletedAt: null,
+        createdAt: { gt: lastReadAt ?? joinedAt }
+      }
+    });
+    return {
+      id: conversation.id,
+      type: conversation.type,
+      title: conversation.type === "GROUP" ? conversation.group?.name ?? conversation.title ?? "Group" : conversation.participants.find((item) => item.userId !== userId)?.user.displayName ?? "Direct message",
+      groupId: conversation.groupId,
+      participants: conversation.participants.map(({ user }) => ({ id: user.id, username: user.username ?? "user", displayName: user.displayName ?? user.username ?? "Krasun user", profileAvatarPath: user.profileAvatarPath, lastSeenAt: user.lastSeenAt.toISOString() })),
+      lastMessage: conversation.messages[0] ? await serializeMessage(conversation.messages[0]) : null,
+      unreadCount
+    };
+  }));
   res.json({ conversations });
 }));
 
@@ -45,6 +57,17 @@ conversationsRouter.get("/:conversationId/messages", asyncRoute(async (req, res)
   res.json({ messages: await Promise.all(rows.reverse().map(serializeMessage)), nextCursor: rows.length === 50 ? rows[0]?.createdAt.toISOString() : null });
 }));
 
+conversationsRouter.post("/:conversationId/read", asyncRoute(async (req, res) => {
+  const userId = requireUserId(req);
+  const conversationId = routeParam(req, "conversationId");
+  await requireConversationAccess(userId, conversationId);
+  await prisma.conversationParticipant.update({
+    where: { conversationId_userId: { conversationId, userId } },
+    data: { lastReadAt: new Date() }
+  });
+  res.status(204).end();
+}));
+
 conversationsRouter.post("/:conversationId/messages", asyncRoute(async (req, res) => {
   const userId = requireUserId(req);
   const conversationId = routeParam(req, "conversationId");
@@ -56,6 +79,10 @@ conversationsRouter.post("/:conversationId/messages", asyncRoute(async (req, res
   const row = await prisma.message.create({ data: { conversationId, senderId: userId, type: parsed.type, text: parsed.type === "TEXT" ? parsed.text : null, payload: parsed.type === "TEXT" ? undefined : parsed.payload as Prisma.InputJsonValue }, include: messageInclude });
   await prisma.conversation.update({ where: { id: conversationId }, data: { updatedAt: new Date() } });
   const message = await serializeMessage(row);
-  getIo(req)?.to(`conversation:${conversationId}`).emit("chat:message-created", message);
+  const io = getIo(req);
+  io?.to(`conversation:${conversationId}`).emit("chat:message-created", message);
+  const recipients = await prisma.conversationParticipant.findMany({ where: { conversationId, userId: { not: userId } }, select: { userId: true } });
+  for (const recipient of recipients) io?.to(`user:${recipient.userId}`).emit("chat:message-created", message);
+  void sendMessagePush({ conversationId, senderId: userId, type: parsed.type, text: parsed.type === "TEXT" ? parsed.text : null });
   res.status(201).json({ message });
 }));

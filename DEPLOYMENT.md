@@ -1,5 +1,32 @@
 # Krasun MVP deployment
 
+## Recommended managed beta: Render
+
+`render.yaml` deploys a no-cost test environment from GitHub:
+
+- one Docker web service serving the React app, Express API, and Socket.IO on
+  the same origin;
+- one managed PostgreSQL 16 database;
+- generated JWT and cookie secrets;
+- development login disabled.
+
+During Blueprint creation, Render prompts for:
+
+- `GOOGLE_CLIENT_ID`;
+- `VITE_MAPBOX_TOKEN` (public browser token);
+- `MAPBOX_SERVER_TOKEN` (secret token used for Directions).
+
+After the first deploy, add the assigned `https://...onrender.com` URL to the
+Google OAuth client's authorized JavaScript origins.
+
+The free configuration is for testing only. Its database expires after 30 days,
+the service can sleep after inactivity, and uploaded media uses an ephemeral
+filesystem. Upgrade before inviting beta users.
+
+`render.production.yaml` is the durable variant. It uses a paid web service, a
+managed paid PostgreSQL database, and a 1 GB persistent disk mounted at
+`/app/uploads`. Confirm current Render pricing before applying it.
+
 ## Production baseline
 
 The production compose file runs PostgreSQL 16, the API, the web application,

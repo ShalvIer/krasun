@@ -1,40 +1,19 @@
-# Secrets
+node_modules/
+dist/
+coverage/
+.DS_Store
+
 .env
 .env.*
 !.env.example
-!.env.*.example
-**/.env
-**/.env.*
-!**/.env.example
-!**/.env.*.example
+!.env.production.example
 
-# Dependencies
-node_modules/
-**/node_modules/
-
-# Generated builds
-dist/
-**/dist/
-build/
-**/build/
-.next/
-coverage/
-.vite/
-*.tsbuildinfo
-
-# Runtime uploads — source code in src/uploads is NOT excluded
-/uploads/
-/apps/api/uploads/
-
-# Local databases and PostgreSQL data
-*.db
-*.sqlite
-*.sqlite3
-pgdata/
-postgres-data/
-
-# Logs and temporary files
+uploads/
 *.log
 npm-debug.log*
-.DS_Store
-*.zip
+
+.idea/
+.vscode/
+
+*.tsbuildinfo
+/build/

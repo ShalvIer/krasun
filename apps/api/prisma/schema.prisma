@@ -96,6 +96,7 @@ model User {
   spots              Spot[]
   spotVisibility     SpotGroupVisibility[]
   preferences        UserPreference[]
+  pushSubscriptions  PushSubscription[]
 }
 
 model AuthIdentity {
@@ -316,4 +317,19 @@ model UserPreference {
   updatedAt DateTime @updatedAt
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@unique([userId, key])
+}
+
+model PushSubscription {
+  id            String    @id @default(uuid()) @db.Uuid
+  userId        String    @db.Uuid
+  endpoint      String    @unique @db.Text
+  p256dh        String    @db.Text
+  auth          String    @db.Text
+  userAgent     String?   @db.Text
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  lastSuccessAt DateTime?
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }

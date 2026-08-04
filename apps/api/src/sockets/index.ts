@@ -17,6 +17,7 @@ export function createSocketServer(server: HttpServer) {
     catch { next(new Error("Authentication required")); }
   });
   io.on("connection", (socket) => {
+    void socket.join(`user:${socket.data.userId}`);
     void registerPresenceHandlers(io, socket);
     registerGroupHandlers(io, socket);
     registerChatHandlers(io, socket);
