@@ -22,6 +22,8 @@ const schema = z.object({
   VAPID_PUBLIC_KEY: z.string().default(""),
   VAPID_PRIVATE_KEY: z.string().default(""),
   VAPID_SUBJECT: z.string().default("mailto:notifications@krasun.app"),
+  RESEND_API_KEY: z.string().default(""),
+  EMAIL_FROM: z.string().max(320).default(""),
   MAX_PHOTO_UPLOAD_BYTES: z.coerce.number().positive().default(10 * 1024 * 1024),
   MAX_AUDIO_UPLOAD_BYTES: z.coerce.number().positive().default(10 * 1024 * 1024),
   MAX_GIF_UPLOAD_BYTES: z.coerce.number().positive().default(5 * 1024 * 1024),

@@ -45,6 +45,10 @@ services:
         sync: false
       - key: VAPID_SUBJECT
         sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
 
 databases:
   - name: krasun-db

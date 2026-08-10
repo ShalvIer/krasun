@@ -63,6 +63,20 @@ export interface AttachmentView {
   duration: number | null;
 }
 
+export interface MessageReplyPreview {
+  id: Id;
+  sender: UserSummary | null;
+  type: MessageType;
+  text: string | null;
+  createdAt: string;
+}
+
+export interface MessageReactionView {
+  emoji: string;
+  count: number;
+  userIds: Id[];
+}
+
 export interface MessageView {
   id: Id;
   conversationId: Id;
@@ -71,6 +85,8 @@ export interface MessageView {
   text: string | null;
   payload: Record<string, unknown> | null;
   attachments: AttachmentView[];
+  replyTo: MessageReplyPreview | null;
+  reactions: MessageReactionView[];
   createdAt: string;
   spotAvailable?: boolean;
 }

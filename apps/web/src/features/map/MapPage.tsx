@@ -10,6 +10,7 @@ import { useGroups } from "../groups/useGroups";
 import { publicSpotsForUser, spotsBounds } from "./mapActions";
 import { coordinatesFromSearch, DEFAULT_MAP_CENTER, ownMapLocation } from "./mapInitialView";
 import { MarkerRegistry, uniqueById } from "./markerRenderCycle";
+import { createSpotMarkerElements, createUserMarkerElements, markerVisual } from "./markerElements";
 import { useAuth } from "../auth/AuthContext";
 import { MapAvatarView } from "../profile/MapAvatar";
 
@@ -87,17 +88,16 @@ export function MapPage() {
 
         let marker = registry.getMarker(key);
         if (!marker) {
-          const element = document.createElement("button");
-          element.type = "button";
-          element.textContent = user.displayName[0]?.toUpperCase() || "K";
-          marker = new mapboxgl.Marker({ element })
+          const { root, visual } = createUserMarkerElements();
+          visual.textContent = user.displayName[0]?.toUpperCase() || "K";
+          marker = new mapboxgl.Marker({ element: root, anchor: "center" })
             .setLngLat([user.location!.longitude, user.location!.latitude])
             .addTo(map);
           registry.retainMarker(key, marker);
         }
 
         const currentMarker = marker;
-        const element = currentMarker.getElement() as HTMLButtonElement;
+        const element = markerVisual(currentMarker.getElement());
         currentMarker.setLngLat([
           user.location!.longitude,
           user.location!.latitude,
@@ -179,16 +179,15 @@ export function MapPage() {
 
       let marker = registry.getMarker(key);
       if (!marker) {
-        const element = document.createElement("button");
-        element.type = "button";
-        marker = new mapboxgl.Marker({ element })
+        const { root } = createSpotMarkerElements();
+        marker = new mapboxgl.Marker({ element: root, anchor: "bottom" })
           .setLngLat([spot.longitude, spot.latitude])
           .addTo(map);
         registry.retainMarker(key, marker);
       }
 
       const currentMarker = marker;
-      const element = currentMarker.getElement() as HTMLButtonElement;
+      const element = markerVisual(currentMarker.getElement());
 
       currentMarker.setLngLat([spot.longitude, spot.latitude]);
       element.className = `spot-marker ${spot.visibility.toLowerCase()}`;

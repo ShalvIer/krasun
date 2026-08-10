@@ -17,7 +17,13 @@ export const groupCreateSchema = z.object({
   description: z.string().trim().max(500).optional(),
   joinMode: z.enum(["OPEN", "APPROVAL_REQUIRED", "INVITE_ONLY"]).default("OPEN")
 });
-export const textMessageSchema = z.object({ conversationId: z.string().uuid(), text: z.string().trim().min(1).max(4000) });
+export const textMessageSchema = z.object({
+  conversationId: z.string().uuid(),
+  text: z.string().trim().min(1).max(4000),
+  replyToId: z.string().uuid().nullable().optional()
+});
+export const messageReactionEmojis = ["👍", "❤️", "😂", "😮", "😢", "🔥"] as const;
+export const messageReactionSchema = z.object({ emoji: z.enum(messageReactionEmojis) });
 export const structuredMessageSchema = z.object({
   conversationId: z.string().uuid(),
   type: z.enum(["SPOT", "LOCATION"]),

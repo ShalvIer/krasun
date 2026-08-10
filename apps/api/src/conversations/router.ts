@@ -1,13 +1,15 @@
 import { Router } from "express";
 import { z } from "zod";
-import { structuredMessageSchema } from "@krasun/shared-validation";
-import { asyncRoute, routeParam } from "../lib/errors.js";
+import { messageReactionSchema, structuredMessageSchema } from "@krasun/shared-validation";
+import { asyncRoute, HttpError, routeParam } from "../lib/errors.js";
 import { requireUserId } from "../middleware/auth.js";
 import { prisma } from "../lib/prisma.js";
-import { getOrCreateDirectConversation, messageInclude, requireConversationAccess, serializeMessage } from "./service.js";
+import { getOrCreateDirectConversation, messageInclude, requireConversationAccess, requireReplyTarget, serializeMessage } from "./service.js";
+import { serializeReactions } from "./policy.js";
 import { getIo } from "../sockets/helpers.js";
 import type { Prisma } from "@prisma/client";
 import { sendMessagePush } from "../push/service.js";
+import { queueMessageEmailNotifications } from "../email/service.js";
 
 export const conversationsRouter = Router();
 
@@ -73,10 +75,11 @@ conversationsRouter.post("/:conversationId/messages", asyncRoute(async (req, res
   const conversationId = routeParam(req, "conversationId");
   await requireConversationAccess(userId, conversationId);
   const parsed = z.discriminatedUnion("type", [
-    z.object({ type: z.literal("TEXT"), text: z.string().trim().min(1).max(4000) }),
-    structuredMessageSchema.omit({ conversationId: true })
+    z.object({ type: z.literal("TEXT"), text: z.string().trim().min(1).max(4000), replyToId: z.string().uuid().nullable().optional() }),
+    structuredMessageSchema.omit({ conversationId: true }).extend({ replyToId: z.string().uuid().nullable().optional() })
   ]).parse(req.body);
-  const row = await prisma.message.create({ data: { conversationId, senderId: userId, type: parsed.type, text: parsed.type === "TEXT" ? parsed.text : null, payload: parsed.type === "TEXT" ? undefined : parsed.payload as Prisma.InputJsonValue }, include: messageInclude });
+  const replyToId = await requireReplyTarget(conversationId, parsed.replyToId);
+  const row = await prisma.message.create({ data: { conversationId, senderId: userId, type: parsed.type, text: parsed.type === "TEXT" ? parsed.text : null, payload: parsed.type === "TEXT" ? undefined : parsed.payload as Prisma.InputJsonValue, replyToId }, include: messageInclude });
   await prisma.conversation.update({ where: { id: conversationId }, data: { updatedAt: new Date() } });
   const message = await serializeMessage(row);
   const io = getIo(req);
@@ -84,5 +87,30 @@ conversationsRouter.post("/:conversationId/messages", asyncRoute(async (req, res
   const recipients = await prisma.conversationParticipant.findMany({ where: { conversationId, userId: { not: userId } }, select: { userId: true } });
   for (const recipient of recipients) io?.to(`user:${recipient.userId}`).emit("chat:message-created", message);
   void sendMessagePush({ conversationId, senderId: userId, type: parsed.type, text: parsed.type === "TEXT" ? parsed.text : null });
+  queueMessageEmailNotifications({ io, messageId: row.id, conversationId, senderId: userId, type: parsed.type, text: parsed.type === "TEXT" ? parsed.text : null });
   res.status(201).json({ message });
+}));
+
+conversationsRouter.post("/:conversationId/messages/:messageId/reactions", asyncRoute(async (req, res) => {
+  const userId = requireUserId(req);
+  const conversationId = routeParam(req, "conversationId");
+  const messageId = routeParam(req, "messageId");
+  const { emoji } = messageReactionSchema.parse(req.body);
+  await requireConversationAccess(userId, conversationId);
+  const message = await prisma.message.findFirst({ where: { id: messageId, conversationId, deletedAt: null }, select: { id: true } });
+  if (!message) throw new HttpError(404, "Message not found", "MESSAGE_NOT_FOUND");
+
+  const reactions = await prisma.$transaction(async (tx) => {
+    const key = { messageId, userId, emoji };
+    const existing = await tx.messageReaction.findUnique({ where: { messageId_userId_emoji: key }, select: { id: true } });
+    if (existing) await tx.messageReaction.delete({ where: { id: existing.id } });
+    else await tx.messageReaction.create({ data: key });
+    return tx.messageReaction.findMany({ where: { messageId }, select: { emoji: true, userId: true }, orderBy: { createdAt: "asc" } });
+  });
+
+  const payload = { conversationId, messageId, reactions: serializeReactions(reactions) };
+  const io = getIo(req);
+  const participants = await prisma.conversationParticipant.findMany({ where: { conversationId }, select: { userId: true } });
+  for (const participant of participants) io?.to(`user:${participant.userId}`).emit("chat:reaction-updated", payload);
+  res.json(payload);
 }));
