@@ -17,6 +17,10 @@ services:
         fromDatabase:
           name: krasun-db
           property: connectionString
+      - key: DIRECT_URL
+        fromDatabase:
+          name: krasun-db
+          property: connectionString
       - key: NODE_ENV
         value: production
       - key: ENABLE_DEV_AUTH
