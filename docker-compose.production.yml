@@ -27,6 +27,7 @@ services:
       API_PORT: 3001
       WEB_URL: https://${DOMAIN}
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
+      DIRECT_URL: ${DIRECT_URL:?Set DIRECT_URL}
       UPLOAD_DIR: /app/uploads
     depends_on:
       postgres:

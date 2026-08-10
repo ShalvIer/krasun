@@ -1,8 +1,8 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { HttpError } from "../lib/errors.js";
-import { directConversationKey } from "./policy.js";
-import type { MessageView } from "@krasun/shared-types";
+import { directConversationKey, serializeReactions } from "./policy.js";
+import type { MessageView, UserSummary } from "@krasun/shared-types";
 import { messageMediaPath } from "../uploads/paths.js";
 
 export async function requireConversationAccess(userId: string, conversationId: string) {
@@ -28,10 +28,32 @@ export async function getOrCreateDirectConversation(userId: string, otherUserId:
 
 export const messageInclude = {
   sender: true,
-  attachments: true
+  attachments: true,
+  replyTo: { include: { sender: true } },
+  reactions: { select: { emoji: true, userId: true } }
 } as const satisfies Prisma.MessageInclude;
 
 type LoadedMessage = Prisma.MessageGetPayload<{ include: typeof messageInclude }>;
+
+function serializeUser(user: LoadedMessage["sender"]): UserSummary | null {
+  return user ? {
+    id: user.id,
+    username: user.username ?? "user",
+    displayName: user.displayName ?? user.username ?? "Krasun user",
+    profileAvatarPath: user.profileAvatarPath,
+    lastSeenAt: user.lastSeenAt.toISOString()
+  } : null;
+}
+
+export async function requireReplyTarget(conversationId: string, replyToId?: string | null) {
+  if (!replyToId) return null;
+  const target = await prisma.message.findFirst({
+    where: { id: replyToId, conversationId, deletedAt: null },
+    select: { id: true }
+  });
+  if (!target) throw new HttpError(400, "Reply target is not available in this conversation", "INVALID_REPLY_TARGET");
+  return target.id;
+}
 
 export async function serializeMessage(message: LoadedMessage): Promise<MessageView> {
   let spotAvailable: boolean | undefined;
@@ -43,11 +65,19 @@ export async function serializeMessage(message: LoadedMessage): Promise<MessageV
   return {
     id: message.id,
     conversationId: message.conversationId,
-    sender: message.sender ? { id: message.sender.id, username: message.sender.username ?? "user", displayName: message.sender.displayName ?? message.sender.username ?? "Krasun user", profileAvatarPath: message.sender.profileAvatarPath, lastSeenAt: message.sender.lastSeenAt.toISOString() } : null,
+    sender: serializeUser(message.sender),
     type: message.type,
     text: message.text,
     payload,
     attachments: message.attachments.map((item) => ({ id: item.id, mediaType: item.mediaType, originalName: item.originalName, url: messageMediaPath(item.id), mimeType: item.mimeType, sizeBytes: item.sizeBytes, duration: item.duration })),
+    replyTo: message.replyTo ? {
+      id: message.replyTo.id,
+      sender: serializeUser(message.replyTo.sender),
+      type: message.replyTo.type,
+      text: message.replyTo.text,
+      createdAt: message.replyTo.createdAt.toISOString()
+    } : null,
+    reactions: serializeReactions(message.reactions),
     createdAt: message.createdAt.toISOString(),
     ...(spotAvailable === undefined ? {} : { spotAvailable })
   };

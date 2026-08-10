@@ -1,8 +1,9 @@
 import { textMessageSchema } from "@krasun/shared-validation";
 import type { KrasunServer, KrasunSocket } from "./helpers.js";
-import { messageInclude, requireConversationAccess, serializeMessage } from "../conversations/service.js";
+import { messageInclude, requireConversationAccess, requireReplyTarget, serializeMessage } from "../conversations/service.js";
 import { prisma } from "../lib/prisma.js";
 import { sendMessagePush } from "../push/service.js";
+import { queueMessageEmailNotifications } from "../email/service.js";
 
 const typingTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
@@ -14,13 +15,15 @@ export function registerChatHandlers(io: KrasunServer, socket: KrasunSocket) {
     void (async () => {
       const input = textMessageSchema.parse(raw);
       await requireConversationAccess(userId, input.conversationId);
-      const row = await prisma.message.create({ data: { conversationId: input.conversationId, senderId: userId, type: "TEXT", text: input.text }, include: messageInclude });
+      const replyToId = await requireReplyTarget(input.conversationId, input.replyToId);
+      const row = await prisma.message.create({ data: { conversationId: input.conversationId, senderId: userId, type: "TEXT", text: input.text, replyToId }, include: messageInclude });
       await prisma.conversation.update({ where: { id: input.conversationId }, data: { updatedAt: new Date() } });
       const message = await serializeMessage(row);
       io.to(`conversation:${input.conversationId}`).emit("chat:message-created", message);
       const recipients = await prisma.conversationParticipant.findMany({ where: { conversationId: input.conversationId, userId: { not: userId } }, select: { userId: true } });
       for (const recipient of recipients) io.to(`user:${recipient.userId}`).emit("chat:message-created", message);
       void sendMessagePush({ conversationId: input.conversationId, senderId: userId, type: "TEXT", text: input.text });
+      queueMessageEmailNotifications({ io, messageId: row.id, conversationId: input.conversationId, senderId: userId, type: "TEXT", text: input.text });
     })().catch((error: unknown) => socket.emit("server:error", { message: error instanceof Error ? error.message : "Message failed" }));
   });
 

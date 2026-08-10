@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { directConversationKey, spotMessageAvailable } from "../src/conversations/policy";
+import { directConversationKey, serializeReactions, spotMessageAvailable } from "../src/conversations/policy";
 import { messageMediaPath } from "../src/uploads/paths";
 
 describe("conversation invariants", () => {
@@ -10,5 +10,16 @@ describe("conversation invariants", () => {
   });
   it("uses the mounted authenticated upload route for message media", () => {
     expect(messageMediaPath("attachment-id")).toBe("/api/uploads/media/attachment-id");
+  });
+  it("groups reactions and ignores duplicate user entries", () => {
+    expect(serializeReactions([
+      { emoji: "👍", userId: "u1" },
+      { emoji: "👍", userId: "u2" },
+      { emoji: "👍", userId: "u1" },
+      { emoji: "🔥", userId: "u1" }
+    ])).toEqual([
+      { emoji: "👍", count: 2, userIds: ["u1", "u2"] },
+      { emoji: "🔥", count: 1, userIds: ["u1"] }
+    ]);
   });
 });

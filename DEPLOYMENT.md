@@ -84,6 +84,28 @@ opening the beta to users.
 
 These values are configurable in `.env.production`.
 
+## Email notifications for messages
+
+Krasun can send transactional email through Resend when a recipient has
+explicitly enabled **Email for missed chat messages** in Settings. Delivery is
+suppressed while any of that user's connected devices has the same conversation
+open. A unique database record and a provider idempotency key prevent duplicate
+delivery for the same message and recipient.
+
+The Render hostname is the application URL, but it cannot be used as a sender
+domain. Before enabling delivery:
+
+1. Buy a domain and verify a sending subdomain in Resend, for example
+   `notify.example.com`.
+2. Add `RESEND_API_KEY` to the API service's Render Environment.
+3. Set `EMAIL_FROM` to a sender on the verified domain, for example
+   `Krasun <notifications@notify.example.com>`.
+4. Redeploy the API. The database migration runs automatically.
+
+Leave both variables empty until the domain is verified. The preference remains
+available in Settings, but the UI reports that delivery is not configured and
+the server does not attempt to send mail.
+
 ## End-to-end encryption
 
 This release is not end-to-end encrypted. HTTPS encrypts traffic in transit,

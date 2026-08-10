@@ -4,13 +4,14 @@ import { statusSchema } from "@krasun/shared-validation";
 import { asyncRoute, HttpError, routeParam } from "../lib/errors.js";
 import { requireUserId } from "../middleware/auth.js";
 import { prisma } from "../lib/prisma.js";
+import { messageEmailConfigured } from "../email/service.js";
 
 export const profilesRouter = Router();
 
 profilesRouter.get("/me", asyncRoute(async (req, res) => {
   const user = await prisma.user.findUnique({ where: { id: requireUserId(req) }, include: { status: true, mapAvatar: true, location: true, preferences: true } });
   if (!user) throw new HttpError(404, "Profile not found");
-  res.json({ profile: { ...user, status: user.status?.expiresAt && user.status.expiresAt > new Date() ? user.status : null } });
+  res.json({ profile: { ...user, status: user.status?.expiresAt && user.status.expiresAt > new Date() ? user.status : null, emailNotificationsConfigured: messageEmailConfigured } });
 }));
 
 profilesRouter.get("/:username", asyncRoute(async (req, res) => {
