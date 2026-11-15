@@ -4,6 +4,9 @@ Krasun is a responsive social map and chat MVP built as a TypeScript monorepo.
 Users share live or frozen locations with groups, create spots, send direct and
 group messages, and upload supported media.
 
+The active product lives in `apps/api`, `apps/web`, and `packages/*`. Generated
+build output such as `dist/` and local runtime caches are intentionally ignored.
+
 ## Stack
 
 - React, Vite, Mapbox GL JS
