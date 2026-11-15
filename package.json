@@ -25,7 +25,9 @@
     "db:studio": "npm run db:studio -w @krasun/api"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4.3.3",
-    "concurrently": "^9.2.1"
+    "@eslint/js": "^10.0.1",
+    "concurrently": "^9.2.1",
+    "eslint": "^10.15.0",
+    "typescript-eslint": "^8.72.2"
   }
 }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import mapboxgl, { type Map as MapboxMap, type Marker } from "mapbox-gl";
-import { Crosshair, EyeOff, Lock, MapPin, MessageCircle, MoreHorizontal, Navigation, Pause, Play, Plus, Route, Satellite, X } from "lucide-react";
+import { Crosshair, EyeOff, Lock, MapPin, MessageCircle, MoreHorizontal, Pause, Play, Plus, Route, Satellite, X } from "lucide-react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import type { Coordinates, RoutePreview, SpotView, TravelMode, UserSummary } from "@krasun/shared-types";
 import { apiFetch, authenticatedMediaUrl } from "../../services/api";
